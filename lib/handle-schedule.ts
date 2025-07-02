@@ -34,7 +34,9 @@ export default async function handleSchedule(): Promise<void> {
     return;
   }
 
-  const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+  const octokit = github.getOctokit(process.env.GITHUB_TOKEN, {
+    request: { fetch },
+  });
 
   core.info("Loading open pull requests");
   const pullRequests = await octokit.paginate(
@@ -61,6 +63,7 @@ export default async function handleSchedule(): Promise<void> {
     }
   );
 
+  core.setOutput("scheduled_pull_requests", pullRequests);
   core.info(`${pullRequests.length} scheduled pull requests found`);
 
   if (pullRequests.length === 0) {
@@ -79,6 +82,8 @@ export default async function handleSchedule(): Promise<void> {
     return;
   }
 
+  const mergedPullRequests = [];
+  const failedPullRequests = [];
   for await (const pullRequest of duePullRequests) {
     if (requireStatusesSuccess) {
       const [checkRunsStatus, statusesStatus] = await Promise.all([
@@ -99,6 +104,7 @@ export default async function handleSchedule(): Promise<void> {
         pull_number: pullRequest.number,
         merge_method: mergeMethod,
       });
+      mergedPullRequests.push(pullRequest);
       core.info(`${pullRequest.html_url} merged`);
     } catch (error) {
       const previousComment = await getPreviousComment(
@@ -133,6 +139,7 @@ export default async function handleSchedule(): Promise<void> {
         issue_number: pullRequest.number,
         labels: [automergeFailLabel],
       });
+      failedPullRequests.push(pullRequest);
       core.info(`Label added: "${automergeFailLabel}"`);
       continue;
     }
@@ -145,7 +152,7 @@ export default async function handleSchedule(): Promise<void> {
     let commentBody = "";
     if (pullRequest.scheduledDate) {
       commentBody = generateBody(
-        `Scheduled on ${pullRequest.scheduledDate} (UTC) successfully merged`,
+        `Scheduled on ${pullRequest.scheduledDate} (${process.env.INPUT_TIME_ZONE}) successfully merged`,
         "success"
       );
     } else {
@@ -172,4 +179,7 @@ export default async function handleSchedule(): Promise<void> {
     );
     core.info(`Comment created: ${data.html_url}`);
   }
+
+  core.setOutput("merged_pull_requests", mergedPullRequests);
+  core.setOutput("failed_pull_requests", failedPullRequests);
 }
