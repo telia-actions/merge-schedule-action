@@ -7,6 +7,9 @@ import handleSchedule from "./handle-schedule";
 main();
 
 async function main() {
+  core.setOutput("scheduled_pull_requests", []);
+  core.setOutput("merged_pull_requests", []);
+  core.setOutput("failed_pull_requests", []);
   try {
     if (github.context.eventName === "pull_request") {
       await handlePullRequest();
